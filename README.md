@@ -56,7 +56,6 @@ const erudio = new Erudio({
   // Optional: configure network behavior
   timeout: 15000, // 15 seconds
   maxRetries: 3, // Retry up to 3 times on 429/5xx errors
-  // baseUrl: 'https://links.erudio.in',
   // fetch: customFetchImpl // Inject custom fetch for edge runtimes
 });
 ```
