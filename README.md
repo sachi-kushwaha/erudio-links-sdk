@@ -16,6 +16,9 @@ Built for modern web development, this SDK provides a strongly-typed, Promise-ba
 - **Isomorphic**: Works flawlessly in Node.js, Bun, Deno, Edge runtimes (Cloudflare Workers, Vercel Edge), and the browser.
 - **Developer Friendly**: Built-in timeout handling, custom errors, and intelligent retries.
 - **Zero Dependencies**: Lightweight architecture using the native `fetch` API.
+- **Advanced Network Controls**: Set request timeouts, inject custom `fetch` clients, and support `AbortSignal`.
+- **Automatic Retries**: Built-in exponential backoff for rate limits and server errors.
+- **Idempotency**: Native support for safe POST retries via `Idempotency-Key` headers.
 
 ---
 
@@ -50,8 +53,11 @@ import { Erudio } from '@erudio/links';
 
 const erudio = new Erudio({
   apiKey: process.env.ERUDIO_API_KEY, // Your secret API key
-  // Optional: override the base URL if needed
-  // baseUrl: 'https://links.erudio.in' 
+  // Optional: configure network behavior
+  timeout: 15000, // 15 seconds
+  maxRetries: 3, // Retry up to 3 times on 429/5xx errors
+  // baseUrl: 'https://links.erudio.in',
+  // fetch: customFetchImpl // Inject custom fetch for edge runtimes
 });
 ```
 
@@ -98,24 +104,73 @@ await erudio.links.update('sachi-github', {
 await erudio.links.delete('sachi-github');
 ```
 
+### 3. Analytics
+
+You can easily fetch analytics for your links.
+
+```typescript
+// Get analytics for all your links
+const allStats = await erudio.analytics.get();
+console.log(`Total clicks: ${allStats.totalClicks}`);
+
+// Get analytics for a specific short link
+const specificStats = await erudio.analytics.get('sachi-github');
+console.log(specificStats.clicksByDate);
+```
+
+---
+
+## Advanced Usage
+
+### Idempotency
+
+When creating resources, you can pass an idempotency key to safely retry requests without accidentally creating duplicates.
+
+```typescript
+const link = await erudio.links.create(
+  { destination: 'https://example.com' },
+  { idempotencyKey: 'request-12345' } // Will be sent as Idempotency-Key header
+);
+```
+
+### Cancellation
+
+You can cancel requests using the standard `AbortController`.
+
+```typescript
+const controller = new AbortController();
+
+// Cancel the request after 1 second manually
+setTimeout(() => controller.abort(), 1000);
+
+try {
+  await erudio.links.list({ signal: controller.signal });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Request was cancelled');
+  }
+}
+```
+
 ---
 
 ## Error Handling
 
-The SDK throws descriptive custom errors when API requests fail, making it easy to debug and handle edge cases gracefully.
+The SDK throws descriptive custom errors when API requests fail, making it easy to debug and handle edge cases gracefully. Every API error exposes a `requestId` so you can easily trace requests.
 
 ```typescript
-import { Erudio, ErudioAPIError } from '@erudio/links';
+import { Erudio, ErudioAPIError, RateLimitError } from '@erudio/links';
 
 try {
   await erudio.links.create({ destination: 'invalid-url' });
 } catch (error) {
-  if (error instanceof ErudioAPIError) {
+  if (error instanceof RateLimitError) {
+    console.error('Hit rate limits, slowing down...');
+  } else if (error instanceof ErudioAPIError) {
     console.error(`Status: ${error.status}`);
     console.error(`Message: ${error.message}`);
     console.error(`API Code: ${error.code}`); // e.g., 'invalid_destination'
-  } else {
-    console.error('An unexpected error occurred:', error);
+    console.error(`Request ID: ${error.requestId}`); // trace ID for debugging
   }
 }
 ```

@@ -1,20 +1,29 @@
 interface FetchOptions extends Omit<RequestInit, 'body'> {
     body?: unknown;
     query?: Record<string, any>;
+    idempotencyKey?: string;
+    timeout?: number;
 }
 interface ClientConfig {
     apiKey: string;
     baseURL?: string;
+    timeout?: number;
+    maxRetries?: number;
+    fetch?: typeof fetch;
     onRequest?: (req: Request) => void | Promise<void>;
     onResponse?: (res: Response) => void | Promise<void>;
 }
 declare class FetchClient {
     private apiKey;
     private baseURL;
+    private timeout;
+    private maxRetries;
+    private fetchImpl;
     private onRequest?;
     private onResponse?;
     constructor(config: ClientConfig);
     request<T>(method: string, path: string, options?: FetchOptions): Promise<T>;
+    private shouldRetry;
     private handleError;
     get<T>(path: string, options?: FetchOptions): Promise<T>;
     post<T>(path: string, options?: FetchOptions): Promise<T>;
@@ -392,25 +401,51 @@ declare class LinksResource {
     delete(shortCode: string): Promise<void>;
 }
 
+type GetAnalyticsResponse = paths['/api/v1/analytics']['get']['responses']['200'];
+declare class AnalyticsResource {
+    private client;
+    constructor(client: FetchClient);
+    /**
+     * Get analytics
+     * @description Get analytics for the authenticated user, optionally filtered by a specific short code.
+     * @param shortCode Optional short code to filter analytics
+     * @returns Analytics payload
+     */
+    get(shortCode?: string): Promise<GetAnalyticsResponse>;
+}
+
 declare class Erudio {
     links: LinksResource;
+    analytics: AnalyticsResource;
     private client;
     constructor(config: ClientConfig);
 }
 
-declare class APIError extends Error {
+declare class ErudioError extends Error {
+    constructor(message: string);
+}
+declare class ErudioAPIError extends ErudioError {
     status: number;
     data: any;
-    constructor(message: string, status: number, data?: any);
+    headers?: Record<string, string>;
+    requestId?: string;
+    code?: string;
+    constructor(message: string, status: number, data?: any, headers?: Headers);
 }
-declare class AuthenticationError extends APIError {
-    constructor(message?: string, data?: any);
+declare class AuthenticationError extends ErudioAPIError {
+    constructor(message?: string, data?: any, headers?: Headers);
 }
-declare class ValidationError extends APIError {
-    constructor(message?: string, data?: any);
+declare class ValidationError extends ErudioAPIError {
+    constructor(message?: string, data?: any, headers?: Headers);
 }
-declare class NotFoundError extends APIError {
-    constructor(message?: string, data?: any);
+declare class NotFoundError extends ErudioAPIError {
+    constructor(message?: string, data?: any, headers?: Headers);
+}
+declare class RateLimitError extends ErudioAPIError {
+    constructor(message?: string, data?: any, headers?: Headers);
+}
+declare class APITimeoutError extends ErudioError {
+    constructor(message?: string);
 }
 
-export { type $defs, APIError, AuthenticationError, type ClientConfig, Erudio, NotFoundError, ValidationError, type components, type operations, type paths, type webhooks };
+export { type $defs, APITimeoutError, AnalyticsResource, AuthenticationError, type ClientConfig, Erudio, ErudioAPIError, ErudioError, type FetchOptions, LinksResource, NotFoundError, RateLimitError, ValidationError, type components, type operations, type paths, type webhooks };
